@@ -1,0 +1,50 @@
+\section{Part Three: A Small MoE Language Model}
+\subsection{Task 1: Implementation, training, and evaluation}
+Each expert applies a $64\rightarrow128\rightarrow64$ MLP with ReLU. The router selects the two largest logits from 16 experts and normalizes their weights over the selected set. Separately, probabilities over all experts feed the provided load-balancing objective. Dispatch gathers only the selected rows for each expert, evaluates those rows, multiplies by the corresponding gates, and accumulates results into the output. No expert is evaluated on all tokens followed by output masking.
+
+The official CPU diagnostic executes exactly 14 selected token--expert pairs for seven tokens with $k=2$, compared with 21 pairs for dense execution. Its maximum output error is zero and its maximum gradient error is $1.11\times10^{-16}$ against the dense reference. Paired routing records are preserved at each position. Both normal routing and position-wise route perturbation pass prefix invariance, with maximum prefix-logit error zero. These checks establish the tested numerical and causal properties, rather than model quality.
+
+\paragraph{Protocol.}
+The supplied two-block causal context model uses dimension 64, four attention heads, sequence length 64, and a 256-byte vocabulary. The computation-matched dense FFN has hidden width 264; the parameter-matched FFN has width 2056. All runs use seed 416, 3000 updates, and batches of 32 sequences, with equal sampling from Shakespeare and Python. AdamW uses the supplied base learning rate $0.002$, weight decay $0.01$, cosine schedule with a 0.15 floor fraction, and gradient clipping at 1. The MoE load-balancing coefficient is $0.01$. Common non-FFN initialization and the sampling order are shared across configurations. Runs use PyTorch 2.8.0 on an arm64 CPU with four threads.
+
+Validation is logged every 500 updates using 20 batches per domain; the checkpoint with the lowest validation CE is selected. In all three runs that checkpoint is at update 3000. Figure~\ref{fig:language-curves} reports the recorded training and validation curves. Training points are individual current-batch losses, not epoch means; their increase at update 3000 does not imply an increase in validation loss. Held-out test evaluation uses nonoverlapping full-length packs within document boundaries: 111,488 text targets and 1,179,520 code targets. The main CE is the unweighted mean of the two domain CEs, and perplexity is its exponential. Test data are not used for checkpoint selection.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{language_curves.pdf}
+\caption{Training and validation cross-entropy for the three configurations under the same 3000-update protocol. Training values are sampled batches at logging steps; validation values average the fixed evaluation procedure. C and P denote computation-matched and parameter-matched dense models.}
+\label{fig:language-curves}
+\end{figure}
+
+\subsection{Task 2: Capacity, computation, routing, and usage}
+Table~\ref{tab:language-results} reports domain metrics, total parameters, matrix MACs per token, and full-batch latency. MAC counts include attention projections and attention products, router, expert matrices, and prediction head across both blocks; they exclude non-matrix operations. With $D=64$, $T=64$, $E=16$, and $k=2$, the per-token count is
+\begin{equation}
+2\left[4D^2+2TD+F\right]+256D,\qquad
+F=\begin{cases}2DH, & \text{dense},\\ ED+2kDH, & \text{MoE}.\end{cases}
+\end{equation}
+Latency includes dispatch and uses $B=32$, $T=64$, ten warmups, and the median of 30 no-gradient forward passes on the same CPU.
+\input{generated/language_results}
+
+\paragraph{Capacity and quality.}
+At the same 133,120 matrix MACs per token, MoE stores 4.34 times as many parameters as the computation-matched dense model and reduces test CE by 0.1230 nats in this run. Against the parameter-matched dense model, whose parameter count differs by only 0.316\%, MoE has similar test CE (difference $-0.0032$ nats), using about 22.49\% of its matrix MACs. This small quality difference from one training seed is not evidence of a reliable advantage.
+
+\paragraph{Measured latency.}
+MoE takes 5.107 ms per batch, compared with 2.458 ms for computation-matched dense and 8.083 ms for parameter-matched dense. Thus equal MACs do not imply equal latency: sparse execution entails gather/scatter, dispatch, and many smaller matrix operations. The measurement is consistent with those overheads but does not isolate their individual costs. The comparison fixes updates and sampling order, rather than wall-clock budget or convergence.
+
+\paragraph{Routing control.}
+The supplied diagnostic exchanges paired expert IDs and gate weights across sequences at the same position in the last layer. It changes neither time positions nor expert--token counts. The trained checkpoint passes prefix invariance for both routing modes, with error zero. The three routing seeds 20261004, 20261005, and 20261006 produce diagnostic CEs of 2.958319, 2.960190, and 2.957595, respectively. Their mean is 2.958701, compared with normal CE 1.762883, an increase of 1.195818. These results indicate sensitivity to the original paired route assignments at this checkpoint. Because predictions depend on other sequences in the batch and the intervention changes both expert IDs and weights, this diagnostic is neither standalone language-model performance nor a causal estimate of the training benefit of routing.
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\linewidth]{task2_analysis.pdf}
+\caption{Task 2 comparison. (a) Test quality versus matrix cost; marker area encodes total parameters. (b) Full-batch forward latency including dispatch. (c) Normal CE and the batch-dependent route-perturbation diagnostic; error bars span the three fixed routing seeds, not independent training runs. (d) Expert selection fractions, normalized within each domain and layer. Expert indices are zero-based.}
+\label{fig:routing}
+\end{figure}
+
+\paragraph{Expert usage and limitations.}
+Figure~\ref{fig:routing} shows domain-dependent routing frequencies. For example, in the second layer, expert 6 receives about 0.87\% of text assignments but 13.59\% of code assignments. These frequencies establish different usage patterns, not semantic specialization or an interpretation of what that expert computes. The experiment uses a single model seed, a small fixed corpus, and CPU timing; variation across training seeds and hardware is not measured. The perturbation preserves routing counts but does not preserve each token's assigned experts or gates.
+
+\subsection{Task 3: Independent investigation}
+\pending{Define the author's testable question, control, experiments, interpretation, and limitation. No new investigation has been performed for this draft. The completed Task 2 diagnostic should not be relabeled as an independent investigation.}
+\FloatBarrier
+

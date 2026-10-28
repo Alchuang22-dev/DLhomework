@@ -1,0 +1,25 @@
+{
+  "python_executable": "/opt/homebrew/anaconda3/envs/sundial/bin/python",
+  "torch": "2.8.0",
+  "device": "CPU (arm64)",
+  "threads": 4,
+  "training_command": "python MoE/train.py --mode all --device cpu",
+  "diagnostics_command": "python MoE/diagnostics.py --device cpu",
+  "source_sha256": {
+    "MoE/model.py": "40db6f58ad45252e652b35212a0c34ee9dc2eb5a36453fc3a496d8fd7f01adab",
+    "MoE/train.py": "4e8ad9e2f5f7207e8e482e6f800e31f55a85aa1b2b7f93f368ebd6af5100a8eb",
+    "MoE/diagnostics.py": "17b340f5b1d094707cd18024398c0f774bf008a5991f979574cff1f80a1269ff"
+  },
+  "pretraining_check": {
+    "passed": true,
+    "selected_token_expert_pairs": 14,
+    "executed_token_expert_pairs": 14,
+    "max_output_error": 0.0,
+    "max_gradient_error": 1.1102230246251565e-16,
+    "per_position_route_records_preserved": true,
+    "prefix_logit_errors": {
+      "normal": 0.0,
+      "position_wise_perturbation": 0.0
+    }
+  }
+}

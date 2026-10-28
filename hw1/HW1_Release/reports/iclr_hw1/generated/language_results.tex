@@ -1,0 +1,15 @@
+\begin{table}[ht]
+\centering
+\small
+\caption{Test results and costs. C/P denote computation/parameter matching; latency is in milliseconds per full batch.}
+\label{tab:language-results}
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+Model & Params & MACs/token & Text CE & Code CE & Mean CE & PPL & ms \\
+\midrule
+Dense C & 139,024 & 133,120 & 1.9732 & 1.7985 & 1.8858 & 6.5919 & 2.458 \\
+MoE & 603,264 & 133,120 & 1.8969 & 1.6289 & 1.7629 & 5.8292 & 5.107 \\
+Dense P & 601,360 & 591,872 & 1.9068 & 1.6255 & 1.7661 & 5.8482 & 8.083 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -27,7 +27,8 @@ class Expert(nn.Module):
         self.w2=nn.Linear(width,d)
     def forward(self,x):
         """x (...,D) -> (...,D), two FC layers with ReLU between them."""
-        raise NotImplementedError('TODO: expert MLP forward.')
+        return self.w2(F.relu(self.w1(x)))
+        # raise NotImplementedError('TODO: expert MLP forward.')
 
 class DenseFFN(nn.Module):
     """Dense two-layer feedforward network with a ReLU hidden layer."""
@@ -56,7 +57,10 @@ class FFN(nn.Module):
         ids (N,k): selected expert indices, descending router score.
         Only gates, rather than all_probs, weight the expert outputs.
         """
-        raise NotImplementedError('TODO: Top-k routing.')
+        logits = self.router(flat)
+        values, ids = logits.topk(self.topk, dim=-1)
+        return logits.softmax(dim=-1), values.softmax(dim=-1),ids
+        # raise NotImplementedError('TODO: Top-k routing.')
 
     def dispatch(self,flat,gates,ids):
         """TODO: return (N,D), executing only selected token/expert pairs.
@@ -65,7 +69,15 @@ class FFN(nn.Module):
         by the corresponding gates and accumulate into the output rows.
         Do not evaluate every expert on every token and mask afterward.
         """
-        raise NotImplementedError('TODO: sparse dispatch.')
+        output = torch.zeros_like(flat)
+        for expert_id, expert in enumerate(self.experts):
+            rows, slots = (ids == expert_id).nonzero(as_tuple=True)
+            if rows.numel():
+                selected = expert(flat.index_select(0,rows))
+                weighted = selected * gates[rows,slots,None]
+                output.index_add_(0, rows, weighted)
+        return output
+        # raise NotImplementedError('TODO: sparse dispatch.')
 
     def forward(self,x,shuffle=False):
         if not self.moe:return self.dense(x),x.new_zeros(())
