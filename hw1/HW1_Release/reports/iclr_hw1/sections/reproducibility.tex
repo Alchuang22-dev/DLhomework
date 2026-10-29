@@ -5,8 +5,8 @@ python NumPy/run.py --check --train
 python MoE/diagnostics.py --check
 python MoE/train.py --mode all --device cpu
 python MoE/diagnostics.py --device cpu
+python MoE/gate_ablation.py --device cpu
 \end{verbatim}
 The bundled data snapshots contain the NumPy results (\path{data/numpy.json}), language-model results (\path{data/language.json}), and source hashes (\path{data/run_provenance.json}). Run \path{prepare_results.py} to rebuild the tables and vector figures. The original logs and selected MoE checkpoint remain in the release's \path{results/} directory. NumPy results were rerun on the current implementation when preparing this report and reproduce the previously checked values.
 
-\pending{Replace the author name and student ID, insert Part One handwritten answers, complete Part Three Task 3, and personally review the results and AI-use disclosure before submission.}
 

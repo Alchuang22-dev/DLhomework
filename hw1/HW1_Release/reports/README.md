@@ -31,9 +31,13 @@ The generated file is `iclr_hw1/main.pdf`.
 ## Edit and refresh
 
 - `main.tex`: title, student name/ID, package configuration, document structure.
-- `sections/part1.tex`: placeholders for the author's independent handwritten scans.
+- `sections/part1.tex`: embeds the two handwritten pages, followed by the SGD pseudocode for Task 1.3.4.
+- `listings/sgd_pseudocode.py`: exact Python code block extracted from `../../results/pseudocode.md`; update this snapshot if the source pseudocode changes.
+- `figures/task1_handwritten.pdf`: unchanged copy of `../../results/task1.pdf`.
 - `sections/part2.tex`: completed NumPy implementation/check/training results.
-- `sections/part3.tex`: completed Task 1/2 and a placeholder for Task 3.
+- `sections/part3.tex`: completed Task 1/2 and inclusion of Task 3.
+- `sections/task3_investigation.tex`: fixed-expert gate-weight experiment (Task 3.4.3), with one table and one figure.
+- `prepare_gate_ablation.py`: rebuilds the Task 3.4.3 table/CSV and PDF/PNG figure from `data/gate_ablation.json`; `--refresh` updates the snapshot from the release results.
 - `sections/ai_use.tex`: factual assistance disclosure requiring author review.
 - `data/`: snapshots of the official result JSON files.
 - `generated/`: tables generated from those JSON files.
@@ -58,7 +62,6 @@ template/example references were carried into the report.
 
 ## Before submission
 
-Replace the name/ID placeholders, insert the handwritten solutions, complete the
-independent investigation, and review the AI Use Statement. This draft does not
+Replace the name/ID placeholders and review the results and AI Use Statement. This draft does not
 claim those unfinished requirements have been completed or independently certify
 compliance with the course's AI-use rules.

@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+from prepare_gate_ablation import build as build_gate_ablation
 
 ROOT = Path(__file__).resolve().parent
 COLORS = ['#0072B2', '#D55E00', '#009E73']
@@ -35,7 +36,7 @@ def main():
     for name in ['data', 'generated', 'figures']:
         (ROOT / name).mkdir(exist_ok=True)
     if args.refresh:
-        for name in ['numpy.json', 'language.json', 'run_provenance.json']:
+        for name in ['numpy.json', 'language.json', 'run_provenance.json', 'gate_ablation.json']:
             shutil.copy2(ROOT.parents[1] / 'results' / name, ROOT / 'data' / name)
     numpy_log = json.loads((ROOT / 'data/numpy.json').read_text())
     log = json.loads((ROOT / 'data/language.json').read_text())
@@ -132,6 +133,7 @@ def main():
                  ticks=[0, .05, .10, .15], label='Selection fraction', fraction=.07)
     fig.savefig(ROOT / 'figures/task2_analysis.pdf')
     plt.close(fig)
+    build_gate_ablation(ROOT)
     print('Prepared tables and vector figures from saved results.')
 
 

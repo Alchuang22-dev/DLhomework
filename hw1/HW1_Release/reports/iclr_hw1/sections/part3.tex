@@ -1,13 +1,73 @@
+\clearpage
 \section{Part Three: A Small MoE Language Model}
-\subsection{Task 1: Implementation, training, and evaluation}
-Each expert applies a $64\rightarrow128\rightarrow64$ MLP with ReLU. The router selects the two largest logits from 16 experts and normalizes their weights over the selected set. Separately, probabilities over all experts feed the provided load-balancing objective. Dispatch gathers only the selected rows for each expert, evaluates those rows, multiplies by the corresponding gates, and accumulates results into the output. No expert is evaluated on all tokens followed by output masking.
+\subsection{Task 3.4.1: Implementation, training, and evaluation}
+\paragraph{Experts, routing, and sparse dispatch.}
+In \path{MoE/model.py}, \texttt{Expert.forward} applies
+$f_e(h)=W_{2,e}\,\mathrm{ReLU}(W_{1,e}h+b_{1,e})+b_{2,e}$,
+a $64\rightarrow128\rightarrow64$ MLP. For an FFN input of shape
+$(B,T,D)$, \texttt{FFN.forward} flattens the first two axes to $N=BT$
+rows. For token $n$, \texttt{FFN.route} computes
+\begin{align}
+s_n&=Gh_n, & p_{ne}&=\frac{\exp(s_{ne})}{\sum_{j=1}^{E}\exp(s_{nj})},\\
+(I_{n1},\ldots,I_{nk})&=\operatorname{TopKIndices}(s_n), &
+a_{nr}&=\frac{\exp(s_{n,I_{nr}})}{\sum_{q=1}^{k}\exp(s_{n,I_{nq}})},
+\end{align}
+with $E=16$ and $k=2$. The returned \texttt{all\_probs}, \texttt{gates},
+and \texttt{ids} are respectively $p\in\mathbb R^{N\times E}$,
+$a\in\mathbb R^{N\times k}$, and $I\in\{1,\ldots,E\}^{N\times k}$
+(mathematical indices are one-based; code IDs are zero-based).
+Only $a$ weights the expert outputs:
+\begin{equation}
+o_n=\sum_{r=1}^{k}a_{nr}f_{I_{nr}}(h_n).
+\end{equation}
+For each expert $e$, \texttt{dispatch} finds pairs $(n,r)$ with $I_{nr}=e$,
+gathers those input rows via \texttt{index\_select}, evaluates $f_e$, and
+accumulates $a_{nr}f_e(h_n)$ using \texttt{index\_add\_}. Thus exactly $Nk$
+token--expert pairs are evaluated, rather than $NE$ followed by masking.
 
-The official CPU diagnostic executes exactly 14 selected token--expert pairs for seven tokens with $k=2$, compared with 21 pairs for dense execution. Its maximum output error is zero and its maximum gradient error is $1.11\times10^{-16}$ against the dense reference. Paired routing records are preserved at each position. Both normal routing and position-wise route perturbation pass prefix invariance, with maximum prefix-logit error zero. These checks establish the tested numerical and causal properties, rather than model quality.
+\paragraph{Residual placement and training objective.}
+The FFN returns $o$ without adding its input. In \path{MoE/train.py},
+\texttt{Block.forward} applies pre-normalization and both residuals:
+\begin{equation}
+\widetilde X=X+\operatorname{Attn}_{\rm causal}(\operatorname{LN}_1(X)),
+\qquad X^{+}=\widetilde X+\operatorname{FFN}(\operatorname{LN}_2(\widetilde X)).
+\end{equation}
+Here the attention term includes the learned output projection. The final
+LayerNorm and bias-free prediction head produce 256 byte logits per token.
+For layer $\ell$, define its selection fraction and mean full-router probability
+as
+\begin{equation}
+q_e^{(\ell)}=\frac{1}{Nk}\sum_{n,r}\mathbf1[I_{nr}^{(\ell)}=e],\qquad
+\overline p_e^{(\ell)}=\frac1N\sum_n p_{ne}^{(\ell)},\qquad
+\mathcal A_\ell=E\sum_e\operatorname{stopgrad}(q_e^{(\ell)})\overline p_e^{(\ell)}.
+\end{equation}
+This is the code's \texttt{fraction.detach()} times \texttt{probs.mean(0)},
+summed and multiplied by $E$. \texttt{Transformer.forward} averages this
+auxiliary term over its $L=2$ blocks, so the training loop minimizes
+\begin{equation}
+\mathcal L_{\rm train}=
+\underbrace{-\frac1{BT}\sum_{b,t}\log P_\theta(y_{bt}\mid x_{b,\le t})}_{\mathcal L_{\rm CE}}
++0.01\,\frac1L\sum_{\ell=1}^{L}\mathcal A_\ell.
+\end{equation}
+Targets are the next bytes; dense FFNs return zero auxiliary loss. Gradients
+are computed by PyTorch autograd. Logged \texttt{train\_ce} and evaluation CE
+exclude the auxiliary term.
+
+The official CPU diagnostic uses a separate three-expert fixture and executes exactly 14 selected token--expert pairs for seven tokens with $k=2$, compared with 21 pairs for dense execution. Its maximum output error is zero and its maximum gradient error is $1.11\times10^{-16}$ against the dense reference. Paired routing records are preserved at each position. Both normal routing and position-wise route perturbation pass prefix invariance, with maximum prefix-logit error zero. These checks establish the tested numerical and causal properties, rather than model quality.
 
 \paragraph{Protocol.}
 The supplied two-block causal context model uses dimension 64, four attention heads, sequence length 64, and a 256-byte vocabulary. The computation-matched dense FFN has hidden width 264; the parameter-matched FFN has width 2056. All runs use seed 416, 3000 updates, and batches of 32 sequences, with equal sampling from Shakespeare and Python. AdamW uses the supplied base learning rate $0.002$, weight decay $0.01$, cosine schedule with a 0.15 floor fraction, and gradient clipping at 1. The MoE load-balancing coefficient is $0.01$. Common non-FFN initialization and the sampling order are shared across configurations. Runs use PyTorch 2.8.0 on an arm64 CPU with four threads.
 
-Validation is logged every 500 updates using 20 batches per domain; the checkpoint with the lowest validation CE is selected. In all three runs that checkpoint is at update 3000. Figure~\ref{fig:language-curves} reports the recorded training and validation curves. Training points are individual current-batch losses, not epoch means; their increase at update 3000 does not imply an increase in validation loss. Held-out test evaluation uses nonoverlapping full-length packs within document boundaries: 111,488 text targets and 1,179,520 code targets. The main CE is the unweighted mean of the two domain CEs, and perplexity is its exponential. Test data are not used for checkpoint selection.
+Validation is logged every 500 updates using 20 batches per domain; the checkpoint with the lowest validation CE is selected. In all three runs that checkpoint is at update 3000. Figure~\ref{fig:language-curves} reports the recorded training and validation curves. Training points are individual current-batch losses, not epoch means; their increase at update 3000 does not imply an increase in validation loss. Held-out test evaluation uses nonoverlapping full-length packs within document boundaries: 111,488 text targets and 1,179,520 code targets. In \texttt{evaluate\_full}, each domain CE first averages over that domain's targets:
+\begin{equation}
+\begin{gathered}
+\mathrm{CE}_d=-\frac1{M_d}\sum_{n=1}^{M_d}\log P_\theta(y_n\mid\text{context}_n),\\
+\mathrm{CE}=\tfrac12(\mathrm{CE}_{\rm text}+\mathrm{CE}_{\rm code}),\qquad
+\mathrm{PPL}=\exp(\mathrm{CE}).
+\end{gathered}
+\end{equation}
+The two domains receive equal weight despite different target counts. Test data
+are not used for checkpoint selection.
 
 \begin{figure}[ht]
 \centering
@@ -16,7 +76,7 @@ Validation is logged every 500 updates using 20 batches per domain; the checkpoi
 \label{fig:language-curves}
 \end{figure}
 
-\subsection{Task 2: Capacity, computation, routing, and usage}
+\subsection{Task 3.4.2: Capacity, computation, routing, and usage}
 Table~\ref{tab:language-results} reports domain metrics, total parameters, matrix MACs per token, and full-batch latency. MAC counts include attention projections and attention products, router, expert matrices, and prediction head across both blocks; they exclude non-matrix operations. With $D=64$, $T=64$, $E=16$, and $k=2$, the per-token count is
 \begin{equation}
 2\left[4D^2+2TD+F\right]+256D,\qquad
@@ -44,7 +104,7 @@ The supplied diagnostic exchanges paired expert IDs and gate weights across sequ
 \paragraph{Expert usage and limitations.}
 Figure~\ref{fig:routing} shows domain-dependent routing frequencies. For example, in the second layer, expert 6 receives about 0.87\% of text assignments but 13.59\% of code assignments. These frequencies establish different usage patterns, not semantic specialization or an interpretation of what that expert computes. The experiment uses a single model seed, a small fixed corpus, and CPU timing; variation across training seeds and hardware is not measured. The perturbation preserves routing counts but does not preserve each token's assigned experts or gates.
 
-\subsection{Task 3: Independent investigation}
-\pending{Define the author's testable question, control, experiments, interpretation, and limitation. No new investigation has been performed for this draft. The completed Task 2 diagnostic should not be relabeled as an independent investigation.}
+\FloatBarrier
+\input{sections/task3_investigation}
 \FloatBarrier
 

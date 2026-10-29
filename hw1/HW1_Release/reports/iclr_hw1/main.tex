@@ -4,25 +4,37 @@
 \usepackage{amsmath,amssymb,booktabs,graphicx,microtype}
 \usepackage{hyperref}
 \usepackage{placeins}
+\usepackage{pdfpages}
+\usepackage{listings}
+\lstdefinestyle{pythonpseudocode}{
+    language=Python,
+    basicstyle=\footnotesize\ttfamily,
+    keywordstyle=\bfseries,
+    commentstyle=\itshape,
+    showstringspaces=false,
+    keepspaces=true,
+    columns=fullflexible,
+    breaklines=true,
+    breakatwhitespace=true,
+    frame=single,
+    captionpos=b
+}
 \hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue}
 \graphicspath{{figures/}}
 \newcommand{\pending}[1]{\par\noindent\textbf{Pending:} #1\par}
 \title{Homework 1:\\Backpropagation and Neural Networks}
-\author{\textbf{[Student name]}\\Student ID: \textbf{[Student ID]}\\Deep Learning (84100343-0)\\Tsinghua University, Autumn 2026}
+\author{\textbf{[Zhang Zeyu]}\\Student ID: \textbf{[2026213422]}\\Deep Learning (84100343-0)\\Tsinghua University, Autumn 2026}
 \iclrfinalcopy
 \begin{document}
 \maketitle
 \lhead{Deep Learning (Autumn 2026) --- Homework 1}
 \begin{abstract}
-This coursework report documents the completed NumPy expert module and a controlled comparison of dense and sparse mixture-of-experts language models. Manual NumPy gradients pass central-difference checks, and the sparse PyTorch implementation passes output, gradient, dispatch-count, and causality diagnostics. With fixed training updates and seed 416, the MoE obtains test cross-entropy 1.7629, compared with 1.8858 for the computation-matched dense model and 1.7661 for the parameter-matched dense model. The comparison illustrates that arithmetic cost, parameter capacity, and measured latency are distinct. Part One handwritten solutions and the Part Three independent investigation remain to be supplied by the author.
+This coursework report includes the author's handwritten backpropagation solutions, the completed NumPy expert module, and a controlled comparison of dense and sparse mixture-of-experts language models.
 \end{abstract}
 \input{sections/part1}
 \input{sections/part2}
 \input{sections/part3}
 \FloatBarrier
 \input{sections/reproducibility}
-\begin{thebibliography}{1}
-\bibitem[Course handout(2026)]{handout} Deep Learning (84100343-0). \emph{Homework 1: Backpropagation and Neural Networks}. Tsinghua University, Autumn 2026. Supplied course handout, \texttt{hw1.pdf}.
-\end{thebibliography}
 \input{sections/ai_use}
 \end{document}

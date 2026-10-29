@@ -1,0 +1,69 @@
+\subsection{Task 3: Do learned gate weights matter with fixed experts?}
+\label{sec:gate-investigation}
+\paragraph{Question and hypothesis.}
+Task 2 changed expert identities and weights together. We ask whether the learned
+weights still matter when the selected experts are fixed. The hypothesis is that
+flattening the weights increases CE and reversing their assignment degrades it
+further, indicating sensitivity to which selected expert receives more weight.
+
+\paragraph{Design and controls.}
+We use the same validation-selected seed-416 checkpoint without retraining.
+Only the last layer's two gate weights change:
+\begin{equation}
+\widetilde g_e(\lambda)=\tfrac12+\lambda(g_e-\tfrac12),\qquad e\in\{1,2\}.
+\end{equation}
+The four conditions, specified before evaluation, are original ($\lambda=1$),
+uniform ($0$), midpoint ($0.5$), and swapped ($-1$). For two weights summing to
+one, swapping gives $(g_2,g_1)$ and preserves their multiset, entropy, and norm.
+It changes their assignment to expert identities. Uniformization additionally
+changes concentration. All preceding computations, model parameters, ordered
+expert IDs, and selected token--expert counts remain fixed. Each condition has
+603,264 parameters and 133,120 matrix MACs/token. Thus this is a weighting
+intervention rather than a computation-budget comparison.
+
+Evaluation uses the same disjoint test packs: 111,488 text and 1,179,520 code
+targets, with batch 32, length 64, and equal domain weighting. The original CE
+exactly reproduces Task 1. Hashes match for every last-layer input and ordered
+route across conditions; expert counts and checkpoint tensors also match.
+Float64 checks verify the weighted-output oracle, 14 executed pairs for seven
+tokens, prefix invariance, and independence from other batch rows. Unlike Task 2's
+cross-sequence perturbation, these interventions remain token-local.
+
+\input{generated/gate_ablation}
+
+\paragraph{Results and interpretation.}
+Table~\ref{tab:gate-ablation} shows that midpoint, uniform, and swapped weights
+increase mean CE by 0.0340, 0.1777, and 0.9092 nats, respectively; both domains
+show the same ordering. These measurements support the stated hypothesis at this
+checkpoint: preserving expert selection alone does not preserve prediction
+quality. Swapping is particularly damaging despite preserving weight concentration,
+supporting the importance of matching weights to expert identities rather than
+concentration alone. It does not establish that the learned weights are optimal
+over all possible assignments.
+
+Figure~\ref{fig:gate-ablation} provides context: original mean gate gaps are
+0.8189 for text and 0.7680 for code, with medians 0.9207 and 0.8919. Only 2.20\%
+and 3.52\% of tokens have a gap below 0.1. Thus uniformization and swapping
+usually make substantial changes, rather than perturbing nearly equal weights.
+The observed gap distribution is consistent with the sensitivity, but is not
+itself evidence that larger-gap tokens incur larger loss increases.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{gate_ablation.pdf}
+\caption{Fixed-expert weight intervention. (a) Domain CE changes at the four
+specified settings; lines connect evaluated points only. (b) Original last-layer
+gate-gap distributions, normalized within each domain, with bin width 0.05.
+These are single-checkpoint measurements, not averages over training seeds.}
+\label{fig:gate-ablation}
+\end{figure}
+\FloatBarrier
+
+\paragraph{Limitations and reproducibility.}
+This experiment concerns one checkpoint and the final layer, with no retraining
+or independent training-seed replication. It does not establish the causal
+benefit of learning gates during training, nor semantic expert specialization.
+The four test evaluations describe pre-specified interventions rather than select
+a new deployed model. Run \path{MoE/gate_ablation.py} on CPU; the separate
+\path{results/gate_ablation.json} records metrics, checks, and source hashes.
+The AI Use Statement below discloses assistance with this investigation.

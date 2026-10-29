@@ -1,16 +1,81 @@
 \section{Part Two: Implementing the Experts}
-\subsection{Task 1: Forward and backward implementation}
-The NumPy module implements the expert MLPs, selected-expert gates, residual addition, and prediction head specified in the handout~\citep{handout}. Samples are stored in rows, while weight arrays retain the prescribed column-vector convention. Expert computations are batched using \texttt{einsum}. Unselected router logits are masked before Softmax, and the supplied mask is retained during finite-difference checks. Prediction log-probabilities are computed using a shifted log-sum-exp expression for numerical stability.
+\subsection{Task 2.3.1: Forward and backward implementation}
+\paragraph{Forward pass and array convention.}
+In \path{NumPy/model.py}, \texttt{forward} stores samples as rows of
+$X\in\mathbb R^{B\times D}$, while parameter arrays follow the handout's
+column-vector convention: $W_{1,e}\in\mathbb R^{H\times D}$,
+$W_{2,e}\in\mathbb R^{D\times H}$, $G\in\mathbb R^{E\times D}$, and
+$C\in\mathbb R^{K\times D}$~\citep{handout}. With $\mathbf1_B$ denoting a
+column of ones, the batched expert and router computations are
+\begin{align}
+V_e&=XW_{1,e}^{\top}+\mathbf1_B b_{1,e}^{\top}, &
+U_e&=\max(V_e,0), &
+F_e&=U_eW_{2,e}^{\top}+\mathbf1_B b_{2,e}^{\top},\\
+S&=XG^{\top}, &
+A_{ie}&=\begin{cases}
+\displaystyle\frac{\exp(S_{ie})}{\sum_{j\in\mathcal S_i}\exp(S_{ij})},&e\in\mathcal S_i,\\
+0,&e\notin\mathcal S_i,
+\end{cases}
+\end{align}
+where $\mathcal S_i$ is the Top-$k$ set, or the set specified by the supplied
+Boolean mask. The implementation uses \texttt{einsum} to compute all $E$
+expert outputs; its masking selects contributions, rather than skipping expert
+evaluation. Unselected logits are replaced by $-\infty$ before Softmax.
+Writing $A_{:e}$ as a column vector, residual addition and prediction are
+\begin{equation}
+R=X+\sum_e A_{:e}\odot F_e,\qquad
+Z=RC^{\top}+\mathbf1_B b_c^{\top},\qquad
+\mathcal L=-\frac1B\sum_i\log P_{i,y_i}.
+\end{equation}
+Here $\odot$ broadcasts the gate column over features and $P$ is the row-wise
+Softmax of $Z$. For stability, the code evaluates
+$\log P_{ic}=\widetilde Z_{ic}-\log\sum_j\exp(\widetilde Z_{ij})$, with
+$\widetilde Z_{ic}=Z_{ic}-\max_j Z_{ij}$, then caches $P=\exp(\log P)$.
+The cache keys \texttt{v}, \texttt{u}, \texttt{experts}, \texttt{gates},
+\texttt{residual}, and \texttt{probs} correspond to $V,U,F,A,R,P$.
 
-Backpropagation uses NumPy only, with no automatic differentiation. The mean-loss scaling is applied once at the prediction logits. The input gradient accumulates the expert, router, and direct residual paths; the ReLU derivative at zero is set to zero. The two-expert numerical case gives loss $1.0986122886681098$, and the supplied three-expert Top-2 case gives loss $1.184281870559786$.
+\paragraph{Backward pass.}
+Let $Y$ be the one-hot encoding of the integer labels, and let an overbar denote
+the derivative of $\mathcal L$ with respect to an array. The NumPy-only
+\texttt{backward} starts with
+\begin{equation}
+\overline Z=(P-Y)/B,\qquad
+\nabla_C\mathcal L=\overline Z^{\top}R,\qquad
+\nabla_{b_c}\mathcal L=\overline Z^{\top}\mathbf1_B,\qquad
+\overline R=\overline ZC.
+\end{equation}
+For each expert, the two \texttt{einsum} parameter contractions implement
+\begin{align}
+\overline F_e&=A_{:e}\odot\overline R,&
+\overline V_e&=(\overline F_eW_{2,e})\odot\mathbf1[V_e>0],\\
+\nabla_{W_{2,e}}\mathcal L&=\overline F_e^{\top}U_e,&
+\nabla_{b_{2,e}}\mathcal L&=\overline F_e^{\top}\mathbf1_B,\\
+\nabla_{W_{1,e}}\mathcal L&=\overline V_e^{\top}X,&
+\nabla_{b_{1,e}}\mathcal L&=\overline V_e^{\top}\mathbf1_B.
+\end{align}
+The router and shared-input gradients are
+\begin{align}
+\overline A_{ie}&=\sum_d\overline R_{id}(F_e)_{id},&
+\overline S_{ie}&=A_{ie}\left(\overline A_{ie}-\sum_j A_{ij}\overline A_{ij}\right),\\
+\nabla_G\mathcal L&=\overline S^{\top}X,&
+\overline X&=\underbrace{\overline R}_{\text{residual}}
++\underbrace{\sum_e\overline V_eW_{1,e}}_{\text{experts}}
++\underbrace{\overline SG}_{\text{router}}.
+\end{align}
+These match \texttt{d\_gates}, \texttt{d\_router\_logits}, and the three
+\texttt{d\_input} contributions. The selection mask is held fixed when
+differentiating, $\mathrm{ReLU}'(0)=0$, and the factor $1/B$ is applied only
+once, in \texttt{d\_logits}. The two-expert numerical case gives loss
+$1.0986122886681098$; the supplied three-expert Top-2 case gives
+$1.184281870559786$.
 
-\subsection{Task 2: Central-difference verification}
+\subsection{Task 2.3.2: Central-difference verification}
 The official checker uses float64, perturbation $\epsilon=10^{-6}$, and a fixed selection mask away from routing ties and ReLU kinks. Table~\ref{tab:numpy-gradients} reports the maximum normalized error for every parameter family and the input, using the normalization in the handout. All errors are below the required $10^{-5}$ threshold.
 \input{generated/numpy_gradients}
 
 The supplied faulty variant explicitly subtracts the direct residual contribution from the otherwise complete input gradient. It therefore omits the identity path from the input to the residual sum. Its normalized input error rises to $0.133333$ in the two-expert case and $0.279717$ in the sparse case. This distinguishes an incorrect shared-input gradient from the parameter gradients, which can still be correct when an input path is omitted.
 
-\subsection{Task 3: Fixed-batch training}
+\subsection{Task 2.3.3: Fixed-batch training}
 Training uses the supplied 128 examples and initialization, fixed context features, 400 full-batch SGD updates, and learning rate $0.2$. No hyperparameter search was performed. Training cross-entropy decreases from $5.593877$ to $1.870696$ (Figure~\ref{fig:numpy-loss}). Table~\ref{tab:numpy-predictions} shows the three examples selected by the provided runner. Two are incorrect despite the loss reduction; this is a training demonstration, not evidence of generalization.
 \begin{figure}[ht]
 \centering

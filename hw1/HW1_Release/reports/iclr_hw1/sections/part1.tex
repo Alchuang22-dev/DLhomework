@@ -1,11 +1,28 @@
 \section{Part One: Backpropagation}
 \label{sec:part1}
-\pending{Insert the author's independent handwritten solutions as photographs or scans. No handwritten derivations have been generated for this draft.}
-\begin{enumerate}
-\item Forward computation for the numerical example: handwritten answer pending.
-\item Softmax Jacobian and cross-entropy gradient: handwritten answer pending.
-\item Parameter and shared-input gradients: handwritten answer pending.
-\item Convolutional backpropagation and SGD: handwritten answer pending.
-\end{enumerate}
-% Put scans in figures/ and insert them here with \includegraphics.
+The next two pages reproduce the handwritten solutions which cover Tasks 1.3.1--1.3.4. 
+The pseudo code is listed as the end.
+
+\includepdf[
+    pages=-,
+    width=.92\paperwidth,
+    height=.90\paperheight,
+    keepaspectratio,
+    pagecommand={\thispagestyle{plain}}
+]{figures/task1_handwritten.pdf}
+
+\subsection*{Task 1.3.4: Mini-batch SGD pseudocode}
+The following Python-style pseudocode supplements the convolutional calculations
+on the preceding handwritten page. It reproduces the corrected code in
+\path{results/pseudocode.md}; the forward and backward routines remain abstract.
+The backward routine returns a fresh gradient dictionary and the full encoded-input
+gradient, including the residual, expert, and router paths, for each batch.
+
+\lstinputlisting[
+    style=pythonpseudocode,
+    caption={Mini-batch SGD for the shared kernel, experts, router, and prediction head.},
+    label={lst:sgd}
+]{listings/sgd_pseudocode.py}
+
+\clearpage
 
